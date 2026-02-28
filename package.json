@@ -4,6 +4,11 @@
   "description": "Agenda dental con login y citas persistidas en PostgreSQL",
   "main": "server.js",
   "scripts": {
+    "test": "jest && vitest run",
+    "test:backend": "jest",
+    "test:frontend": "vitest run",
+    "test:watch": "jest --watch",
+    "test:ui": "vitest --ui",
     "start": "node server.js"
   },
   "dependencies": {
@@ -24,6 +29,10 @@
   },
   "homepage": "https://github.com/Brandon0902/bugysodtdental#readme",
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "jest": "^29.7.0",
+    "supertest": "^7.1.1",
+    "vitest": "^3.2.4",
+    "jsdom": "^24.1.3"
   }
 }
