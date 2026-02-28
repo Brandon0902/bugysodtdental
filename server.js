@@ -1,32 +1,37 @@
 const path = require("path");
 const express = require("express");
-const { Pool } = require("pg");
+const mysql = require("mysql2/promise");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const pool = new Pool({
+const pool = mysql.createPool({
   host: process.env.DB_HOST || "127.0.0.1",
-  port: Number(process.env.DB_PORT || 3307),
-  database: process.env.DB_DATABASE || "reservaciones_qr",
+  port: Number(process.env.DB_PORT || 3307), // ajusta a tu puerto real
+  database: process.env.DB_DATABASE || "bugysodtdental",
   user: process.env.DB_USERNAME || "usuario_app",
   password: process.env.DB_PASSWORD || "PasswordApp",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 async function initializeDatabase() {
+  // USERS
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
+      id INT AUTO_INCREMENT PRIMARY KEY,
       email VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
       role VARCHAR(80) NOT NULL,
       name VARCHAR(120) NOT NULL
-    );
+    ) ENGINE=InnoDB;
   `);
 
+  // APPOINTMENTS
   await pool.query(`
     CREATE TABLE IF NOT EXISTS appointments (
       id VARCHAR(80) PRIMARY KEY,
@@ -37,129 +42,217 @@ async function initializeDatabase() {
       reason VARCHAR(200) NOT NULL,
       doctor VARCHAR(120) NOT NULL,
       notes TEXT,
-      whatsapp BOOLEAN DEFAULT FALSE,
+      whatsapp TINYINT(1) DEFAULT 0,
       status VARCHAR(40) DEFAULT 'Programada',
-      created_at TIMESTAMP DEFAULT NOW()
-    );
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB;
   `);
 
-  await pool.query(
-    `
-    INSERT INTO users (email, password, role, name)
+  // Seed usuarios (no duplicar)
+  await pool.query(`
+    INSERT IGNORE INTO users (email, password, role, name)
     VALUES
       ('admin@bugsoft.com', '123456', 'Administrador', 'Admin Principal'),
       ('recep@bugsoft.com', '123456', 'Recepcionista', 'Laura Recepción'),
-      ('dentista@bugsoft.com', '123456', 'Dentista', 'Dr. Dentista')
-    ON CONFLICT (email) DO NOTHING;
-  `
-  );
+      ('dentista@bugsoft.com', '123456', 'Dentista', 'Dr. Dentista');
+  `);
 }
 
 app.post("/api/login", async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ message: "Correo y contraseña son obligatorios." });
+    if (!email || !password) {
+      return res.status(400).json({ message: "Correo y contraseña son obligatorios." });
+    }
+
+    const [rows] = await pool.query(
+      "SELECT email, role, name FROM users WHERE LOWER(email) = LOWER(?) AND password = ? LIMIT 1",
+      [email, password]
+    );
+
+    if (!rows.length) {
+      return res.status(401).json({ message: "Credenciales inválidas." });
+    }
+
+    return res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Error interno del servidor." });
   }
-
-  const result = await pool.query(
-    "SELECT email, role, name FROM users WHERE LOWER(email) = LOWER($1) AND password = $2 LIMIT 1",
-    [email, password]
-  );
-
-  if (!result.rows.length) {
-    return res.status(401).json({ message: "Credenciales inválidas." });
-  }
-
-  return res.json(result.rows[0]);
 });
 
 app.get("/api/appointments", async (_req, res) => {
-  const result = await pool.query(
-    "SELECT id, patient, phone, TO_CHAR(date, 'YYYY-MM-DD') AS date, time, reason, doctor, notes, whatsapp, status FROM appointments ORDER BY date, time"
-  );
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        id, patient, phone, 
+        DATE_FORMAT(date, '%Y-%m-%d') AS date,
+        time, reason, doctor, notes,
+        whatsapp, status
+      FROM appointments
+      ORDER BY date, time;
+    `);
 
-  res.json(result.rows);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error interno del servidor." });
+  }
 });
 
 app.post("/api/appointments", async (req, res) => {
-  const { id, patient, phone, date, time, reason, doctor, notes, whatsapp, status } = req.body;
+  try {
+    const { id, patient, phone, date, time, reason, doctor, notes, whatsapp, status } = req.body;
 
-  if (!id || !patient || !phone || !date || !time || !reason || !doctor) {
-    return res.status(400).json({ message: "Faltan campos obligatorios de la cita." });
+    if (!id || !patient || !phone || !date || !time || !reason || !doctor) {
+      return res.status(400).json({ message: "Faltan campos obligatorios de la cita." });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO appointments (id, patient, phone, date, time, reason, doctor, notes, whatsapp, status)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+      `,
+      [
+        id,
+        patient,
+        phone,
+        date,
+        time,
+        reason,
+        doctor,
+        notes || "",
+        whatsapp ? 1 : 0,
+        status || "Programada",
+      ]
+    );
+
+    // Regresar la cita insertada
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        id, patient, phone, 
+        DATE_FORMAT(date, '%Y-%m-%d') AS date,
+        time, reason, doctor, notes,
+        whatsapp, status
+      FROM appointments
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    // Por si id duplicado
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Ya existe una cita con ese id." });
+    }
+    res.status(500).json({ message: "Error interno del servidor." });
   }
-
-  const result = await pool.query(
-    `
-    INSERT INTO appointments (id, patient, phone, date, time, reason, doctor, notes, whatsapp, status)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-    RETURNING id, patient, phone, TO_CHAR(date, 'YYYY-MM-DD') AS date, time, reason, doctor, notes, whatsapp, status
-    `,
-    [id, patient, phone, date, time, reason, doctor, notes || "", Boolean(whatsapp), status || "Programada"]
-  );
-
-  res.status(201).json(result.rows[0]);
 });
 
 app.put("/api/appointments/:id", async (req, res) => {
-  const { id } = req.params;
-  const { patient, phone, date, time, reason, doctor, notes, whatsapp, status } = req.body;
+  try {
+    const { id } = req.params;
+    const { patient, phone, date, time, reason, doctor, notes, whatsapp, status } = req.body;
 
-  const result = await pool.query(
-    `
-    UPDATE appointments
-    SET patient = $1,
-        phone = $2,
-        date = $3,
-        time = $4,
-        reason = $5,
-        doctor = $6,
-        notes = $7,
-        whatsapp = $8,
-        status = $9
-    WHERE id = $10
-    RETURNING id, patient, phone, TO_CHAR(date, 'YYYY-MM-DD') AS date, time, reason, doctor, notes, whatsapp, status
-    `,
-    [patient, phone, date, time, reason, doctor, notes || "", Boolean(whatsapp), status || "Programada", id]
-  );
+    const [result] = await pool.query(
+      `
+      UPDATE appointments
+      SET patient = ?,
+          phone = ?,
+          date = ?,
+          time = ?,
+          reason = ?,
+          doctor = ?,
+          notes = ?,
+          whatsapp = ?,
+          status = ?
+      WHERE id = ?
+      `,
+      [
+        patient,
+        phone,
+        date,
+        time,
+        reason,
+        doctor,
+        notes || "",
+        whatsapp ? 1 : 0,
+        status || "Programada",
+        id,
+      ]
+    );
 
-  if (!result.rows.length) {
-    return res.status(404).json({ message: "Cita no encontrada." });
+    if (!result.affectedRows) {
+      return res.status(404).json({ message: "Cita no encontrada." });
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        id, patient, phone, 
+        DATE_FORMAT(date, '%Y-%m-%d') AS date,
+        time, reason, doctor, notes,
+        whatsapp, status
+      FROM appointments
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    return res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error interno del servidor." });
   }
-
-  return res.json(result.rows[0]);
 });
 
 app.patch("/api/appointments/:id/cancel", async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-  const result = await pool.query(
-    `
-    UPDATE appointments
-    SET status = 'Cancelada'
-    WHERE id = $1
-    RETURNING id, patient, phone, TO_CHAR(date, 'YYYY-MM-DD') AS date, time, reason, doctor, notes, whatsapp, status
-    `,
-    [id]
-  );
+    const [result] = await pool.query(
+      `
+      UPDATE appointments
+      SET status = 'Cancelada'
+      WHERE id = ?
+      `,
+      [id]
+    );
 
-  if (!result.rows.length) {
-    return res.status(404).json({ message: "Cita no encontrada." });
+    if (!result.affectedRows) {
+      return res.status(404).json({ message: "Cita no encontrada." });
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        id, patient, phone, 
+        DATE_FORMAT(date, '%Y-%m-%d') AS date,
+        time, reason, doctor, notes,
+        whatsapp, status
+      FROM appointments
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    return res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error interno del servidor." });
   }
-
-  return res.json(result.rows[0]);
-});
-
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ message: "Error interno del servidor." });
 });
 
 initializeDatabase()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Servidor listo en http://localhost:${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`Servidor listo en http://localhost:${PORT}`));
   })
   .catch((error) => {
     console.error("No se pudo inicializar la base de datos:", error.message);

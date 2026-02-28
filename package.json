@@ -7,7 +7,23 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "pg": "^8.13.1"
+    "express": "^4.22.1",
+    "mysql": "^2.18.1",
+    "mysql2": "^3.18.2",
+    "pg": "^8.19.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Brandon0902/bugysodtdental.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Brandon0902/bugysodtdental/issues"
+  },
+  "homepage": "https://github.com/Brandon0902/bugysodtdental#readme",
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }
