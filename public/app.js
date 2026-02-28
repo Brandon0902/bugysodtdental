@@ -270,90 +270,92 @@ function refreshAgenda() {
   renderSidePanels();
 }
 
-loginForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  clearLoginError();
+function setupEventListeners() {
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearLoginError();
 
-  const email = document.getElementById("email").value.trim().toLowerCase();
-  const password = document.getElementById("password").value;
-  const remember = document.getElementById("remember-me").checked;
+    const email = document.getElementById("email").value.trim().toLowerCase();
+    const password = document.getElementById("password").value;
+    const remember = document.getElementById("remember-me").checked;
 
-  try {
-    const user = await apiRequest("/api/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-
-    setSession({ userRole: user.role, userName: user.name, email: user.email }, remember);
-    await initializeApp();
-  } catch (error) {
-    showLoginError(error.message || "No se pudo iniciar sesión.");
-  }
-});
-
-logoutBtn.addEventListener("click", () => {
-  clearSession();
-  showView("login");
-});
-
-document.getElementById("new-appointment-desktop").addEventListener("click", () => openAppointmentModal());
-document.getElementById("new-appointment-mobile").addEventListener("click", () => openAppointmentModal());
-closeModalBtn.addEventListener("click", closeModal);
-
-cancelAppointmentBtn.addEventListener("click", async () => {
-  const id = formFields.id.value;
-  if (!id) return;
-
-  try {
-    const updated = await apiRequest(`/api/appointments/${id}/cancel`, { method: "PATCH" });
-    appointments = appointments.map((item) => (item.id === id ? updated : item));
-    refreshAgenda();
-    closeModal();
-  } catch (error) {
-    alert(error.message || "No se pudo cancelar la cita.");
-  }
-});
-
-appointmentForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const payload = {
-    id: formFields.id.value || `a-${Date.now()}`,
-    patient: formFields.patient.value.trim(),
-    phone: formFields.phone.value.trim(),
-    date: formFields.date.value,
-    day: parseDayFromDate(formFields.date.value),
-    time: formFields.time.value,
-    reason: formFields.reason.value,
-    doctor: formFields.doctor.value,
-    notes: formFields.notes.value.trim(),
-    whatsapp: formFields.whatsapp.checked,
-    status: "Programada",
-  };
-
-  try {
-    if (formFields.id.value) {
-      const current = appointments.find((a) => a.id === formFields.id.value);
-      payload.status = current?.status || "Programada";
-      const updated = await apiRequest(`/api/appointments/${payload.id}`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      });
-      appointments = appointments.map((a) => (a.id === payload.id ? updated : a));
-    } else {
-      const created = await apiRequest("/api/appointments", {
+    try {
+      const user = await apiRequest("/api/login", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ email, password }),
       });
-      appointments.push(created);
-    }
 
-    refreshAgenda();
-    closeModal();
-  } catch (error) {
-    alert(error.message || "No se pudo guardar la cita.");
-  }
-});
+      setSession({ userRole: user.role, userName: user.name, email: user.email }, remember);
+      await initializeApp();
+    } catch (error) {
+      showLoginError(error.message || "No se pudo iniciar sesión.");
+    }
+  });
+
+  logoutBtn.addEventListener("click", () => {
+    clearSession();
+    showView("login");
+  });
+
+  document.getElementById("new-appointment-desktop").addEventListener("click", () => openAppointmentModal());
+  document.getElementById("new-appointment-mobile").addEventListener("click", () => openAppointmentModal());
+  closeModalBtn.addEventListener("click", closeModal);
+
+  cancelAppointmentBtn.addEventListener("click", async () => {
+    const id = formFields.id.value;
+    if (!id) return;
+
+    try {
+      const updated = await apiRequest(`/api/appointments/${id}/cancel`, { method: "PATCH" });
+      appointments = appointments.map((item) => (item.id === id ? updated : item));
+      refreshAgenda();
+      closeModal();
+    } catch (error) {
+      alert(error.message || "No se pudo cancelar la cita.");
+    }
+  });
+
+  appointmentForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const payload = {
+      id: formFields.id.value || `a-${Date.now()}`,
+      patient: formFields.patient.value.trim(),
+      phone: formFields.phone.value.trim(),
+      date: formFields.date.value,
+      day: parseDayFromDate(formFields.date.value),
+      time: formFields.time.value,
+      reason: formFields.reason.value,
+      doctor: formFields.doctor.value,
+      notes: formFields.notes.value.trim(),
+      whatsapp: formFields.whatsapp.checked,
+      status: "Programada",
+    };
+
+    try {
+      if (formFields.id.value) {
+        const current = appointments.find((a) => a.id === formFields.id.value);
+        payload.status = current?.status || "Programada";
+        const updated = await apiRequest(`/api/appointments/${payload.id}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        appointments = appointments.map((a) => (a.id === payload.id ? updated : a));
+      } else {
+        const created = await apiRequest("/api/appointments", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        appointments.push(created);
+      }
+
+      refreshAgenda();
+      closeModal();
+    } catch (error) {
+      alert(error.message || "No se pudo guardar la cita.");
+    }
+  });
+}
 
 async function initializeApp() {
   const session = activeSession();
@@ -374,4 +376,36 @@ async function initializeApp() {
   }
 }
 
-initializeApp();
+function bootstrapApp() {
+  if (!loginForm || !appointmentForm || !mobileAppointments || !mobileDaySelector) {
+    return;
+  }
+  setupEventListeners();
+  initializeApp();
+}
+
+function __setAppointments(nextAppointments) {
+  appointments = nextAppointments;
+}
+
+function __setSelectedDay(day) {
+  selectedDay = day;
+}
+
+if (typeof module !== "undefined") {
+  module.exports = {
+    setSession,
+    activeSession,
+    clearSession,
+    parseDayFromDate,
+    roundedHour,
+    normalizeDemoDate,
+    apiRequest,
+    renderMobileAppointments,
+    createMobileDayChips,
+    __setAppointments,
+    __setSelectedDay,
+  };
+}
+
+bootstrapApp();

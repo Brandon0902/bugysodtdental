@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "127.0.0.1",
-  port: Number(process.env.DB_PORT || 3307), // ajusta a tu puerto real
+  port: Number(process.env.DB_PORT || 3307),
   database: process.env.DB_DATABASE || "bugysodtdental",
   user: process.env.DB_USERNAME || "usuario_app",
   password: process.env.DB_PASSWORD || "PasswordApp",
@@ -20,7 +20,6 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 async function initializeDatabase() {
-  // USERS
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -31,7 +30,6 @@ async function initializeDatabase() {
     ) ENGINE=InnoDB;
   `);
 
-  // APPOINTMENTS
   await pool.query(`
     CREATE TABLE IF NOT EXISTS appointments (
       id VARCHAR(80) PRIMARY KEY,
@@ -48,7 +46,6 @@ async function initializeDatabase() {
     ) ENGINE=InnoDB;
   `);
 
-  // Seed usuarios (no duplicar)
   await pool.query(`
     INSERT IGNORE INTO users (email, password, role, name)
     VALUES
@@ -85,8 +82,8 @@ app.post("/api/login", async (req, res) => {
 app.get("/api/appointments", async (_req, res) => {
   try {
     const [rows] = await pool.query(`
-      SELECT 
-        id, patient, phone, 
+      SELECT
+        id, patient, phone,
         DATE_FORMAT(date, '%Y-%m-%d') AS date,
         time, reason, doctor, notes,
         whatsapp, status
@@ -114,25 +111,13 @@ app.post("/api/appointments", async (req, res) => {
       INSERT INTO appointments (id, patient, phone, date, time, reason, doctor, notes, whatsapp, status)
       VALUES (?,?,?,?,?,?,?,?,?,?)
       `,
-      [
-        id,
-        patient,
-        phone,
-        date,
-        time,
-        reason,
-        doctor,
-        notes || "",
-        whatsapp ? 1 : 0,
-        status || "Programada",
-      ]
+      [id, patient, phone, date, time, reason, doctor, notes || "", whatsapp ? 1 : 0, status || "Programada"]
     );
 
-    // Regresar la cita insertada
     const [rows] = await pool.query(
       `
-      SELECT 
-        id, patient, phone, 
+      SELECT
+        id, patient, phone,
         DATE_FORMAT(date, '%Y-%m-%d') AS date,
         time, reason, doctor, notes,
         whatsapp, status
@@ -146,7 +131,6 @@ app.post("/api/appointments", async (req, res) => {
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
-    // Por si id duplicado
     if (err.code === "ER_DUP_ENTRY") {
       return res.status(409).json({ message: "Ya existe una cita con ese id." });
     }
@@ -173,18 +157,7 @@ app.put("/api/appointments/:id", async (req, res) => {
           status = ?
       WHERE id = ?
       `,
-      [
-        patient,
-        phone,
-        date,
-        time,
-        reason,
-        doctor,
-        notes || "",
-        whatsapp ? 1 : 0,
-        status || "Programada",
-        id,
-      ]
+      [patient, phone, date, time, reason, doctor, notes || "", whatsapp ? 1 : 0, status || "Programada", id]
     );
 
     if (!result.affectedRows) {
@@ -193,8 +166,8 @@ app.put("/api/appointments/:id", async (req, res) => {
 
     const [rows] = await pool.query(
       `
-      SELECT 
-        id, patient, phone, 
+      SELECT
+        id, patient, phone,
         DATE_FORMAT(date, '%Y-%m-%d') AS date,
         time, reason, doctor, notes,
         whatsapp, status
@@ -231,8 +204,8 @@ app.patch("/api/appointments/:id/cancel", async (req, res) => {
 
     const [rows] = await pool.query(
       `
-      SELECT 
-        id, patient, phone, 
+      SELECT
+        id, patient, phone,
         DATE_FORMAT(date, '%Y-%m-%d') AS date,
         time, reason, doctor, notes,
         whatsapp, status
@@ -250,11 +223,16 @@ app.patch("/api/appointments/:id/cancel", async (req, res) => {
   }
 });
 
-initializeDatabase()
-  .then(() => {
-    app.listen(PORT, () => console.log(`Servidor listo en http://localhost:${PORT}`));
-  })
-  .catch((error) => {
+async function startServer() {
+  await initializeDatabase();
+  app.listen(PORT, () => console.log(`Servidor listo en http://localhost:${PORT}`));
+}
+
+if (require.main === module) {
+  startServer().catch((error) => {
     console.error("No se pudo inicializar la base de datos:", error.message);
     process.exit(1);
   });
+}
+
+module.exports = { app, pool, initializeDatabase, startServer };
