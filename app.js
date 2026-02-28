@@ -1,18 +1,12 @@
 const STORAGE_KEYS = {
   session: "bugsoft_session",
-  appointments: "bugsoft_appointments",
 };
-
-const USERS = [
-  { email: "admin@bugsoft.com", password: "123456", role: "Administrador", name: "Admin Principal" },
-  { email: "recep@bugsoft.com", password: "123456", role: "Recepcionista", name: "Laura Recepción" },
-  { email: "dentista@bugsoft.com", password: "123456", role: "Dentista", name: "Dr. Dentista" },
-];
 
 const DAY_ORDER = ["Lun", "Mar", "Mié", "Jue", "Vie"];
 const TIME_SLOTS = ["09:00", "10:00", "11:00", "12:00"];
 const COLOR_CLASSES = ["#e8f1ff", "#e8f8ef", "#fff3e7", "#ffeaea", "#f1ecff"];
 let selectedDay = "Lun";
+let appointments = [];
 
 const views = {
   login: document.getElementById("login-view"),
@@ -51,10 +45,6 @@ const formFields = {
   whatsapp: document.getElementById("whatsapp"),
 };
 
-function getSession() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || "null");
-}
-
 function setSession(session, remember) {
   if (remember) {
     localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session));
@@ -85,36 +75,6 @@ function normalizeDemoDate(dayShort) {
   return monday.toISOString().slice(0, 10);
 }
 
-function loadAppointments() {
-  const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.appointments) || "null");
-  if (stored && Array.isArray(stored) && stored.length) return stored;
-
-  const seed = [
-    { patient: "Luis García", phone: "555-1001", day: "Lun", time: "10:00", reason: "Limpieza Dental", doctor: "Dra. Marta Ruiz", notes: "Primera visita" },
-    { patient: "Ana Torres", phone: "555-2034", day: "Lun", time: "11:00", reason: "Revisión", doctor: "Dr. Carlos Pérez", notes: "Control mensual" },
-    { patient: "Jorge Díaz", phone: "555-4512", day: "Mar", time: "12:30", reason: "Caries y Empaste", doctor: "Dra. Marta Ruiz", notes: "Dolor moderado" },
-    { patient: "Marta León", phone: "555-1200", day: "Mié", time: "09:00", reason: "Ortodoncia", doctor: "Dr. Carlos Pérez", notes: "Ajuste de brackets" },
-    { patient: "Sofía Muñoz", phone: "555-8822", day: "Jue", time: "10:00", reason: "Limpieza Dental", doctor: "Dra. Marta Ruiz", notes: "Seguimiento" },
-    { patient: "Pedro Rivas", phone: "555-9921", day: "Vie", time: "11:00", reason: "Urgencia", doctor: "Dr. Carlos Pérez", notes: "Inflamación" },
-    { patient: "Carla Pineda", phone: "555-4456", day: "Vie", time: "12:00", reason: "Revisión", doctor: "Dra. Marta Ruiz", notes: "Paciente nueva" },
-  ].map((item, i) => ({
-    id: `a-${Date.now()}-${i}`,
-    ...item,
-    date: normalizeDemoDate(item.day),
-    status: "Programada",
-    whatsapp: i % 2 === 0,
-  }));
-
-  localStorage.setItem(STORAGE_KEYS.appointments, JSON.stringify(seed));
-  return seed;
-}
-
-let appointments = loadAppointments();
-
-function saveAppointments() {
-  localStorage.setItem(STORAGE_KEYS.appointments, JSON.stringify(appointments));
-}
-
 function showView(viewName) {
   views.login.classList.toggle("hidden", viewName !== "login");
   views.agenda.classList.toggle("hidden", viewName !== "agenda");
@@ -139,6 +99,60 @@ function parseDayFromDate(dateStr) {
 function roundedHour(time) {
   const [h] = time.split(":").map(Number);
   return `${String(h).padStart(2, "0")}:00`;
+}
+
+async function apiRequest(url, options = {}) {
+  const response = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+
+  if (!response.ok) {
+    let message = "No fue posible completar la solicitud.";
+    try {
+      const errorData = await response.json();
+      if (errorData?.message) message = errorData.message;
+    } catch (_) {
+      // No-op
+    }
+    throw new Error(message);
+  }
+
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+async function loadAppointments() {
+  const fromDb = await apiRequest("/api/appointments");
+
+  if (Array.isArray(fromDb) && fromDb.length) {
+    appointments = fromDb;
+    return;
+  }
+
+  const seed = [
+    { patient: "Luis García", phone: "555-1001", day: "Lun", time: "10:00", reason: "Limpieza Dental", doctor: "Dra. Marta Ruiz", notes: "Primera visita" },
+    { patient: "Ana Torres", phone: "555-2034", day: "Lun", time: "11:00", reason: "Revisión", doctor: "Dr. Carlos Pérez", notes: "Control mensual" },
+    { patient: "Jorge Díaz", phone: "555-4512", day: "Mar", time: "12:30", reason: "Caries y Empaste", doctor: "Dra. Marta Ruiz", notes: "Dolor moderado" },
+    { patient: "Marta León", phone: "555-1200", day: "Mié", time: "09:00", reason: "Ortodoncia", doctor: "Dr. Carlos Pérez", notes: "Ajuste de brackets" },
+    { patient: "Sofía Muñoz", phone: "555-8822", day: "Jue", time: "10:00", reason: "Limpieza Dental", doctor: "Dra. Marta Ruiz", notes: "Seguimiento" },
+    { patient: "Pedro Rivas", phone: "555-9921", day: "Vie", time: "11:00", reason: "Urgencia", doctor: "Dr. Carlos Pérez", notes: "Inflamación" },
+    { patient: "Carla Pineda", phone: "555-4456", day: "Vie", time: "12:00", reason: "Revisión", doctor: "Dra. Marta Ruiz", notes: "Paciente nueva" },
+  ].map((item, i) => ({
+    id: `a-${Date.now()}-${i}`,
+    patient: item.patient,
+    phone: item.phone,
+    date: normalizeDemoDate(item.day),
+    time: item.time,
+    reason: item.reason,
+    doctor: item.doctor,
+    notes: item.notes,
+    status: "Programada",
+    whatsapp: i % 2 === 0,
+  }));
+
+  await Promise.all(seed.map((item) => apiRequest("/api/appointments", { method: "POST", body: JSON.stringify(item) })));
+  appointments = seed;
 }
 
 function openAppointmentModal(item = null) {
@@ -256,7 +270,7 @@ function refreshAgenda() {
   renderSidePanels();
 }
 
-loginForm.addEventListener("submit", (event) => {
+loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearLoginError();
 
@@ -264,15 +278,17 @@ loginForm.addEventListener("submit", (event) => {
   const password = document.getElementById("password").value;
   const remember = document.getElementById("remember-me").checked;
 
-  const user = USERS.find((u) => u.email === email && u.password === password);
+  try {
+    const user = await apiRequest("/api/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
 
-  if (!user) {
-    showLoginError("Credenciales inválidas. Verifica tu correo y contraseña.");
-    return;
+    setSession({ userRole: user.role, userName: user.name, email: user.email }, remember);
+    await initializeApp();
+  } catch (error) {
+    showLoginError(error.message || "No se pudo iniciar sesión.");
   }
-
-  setSession({ userRole: user.role, userName: user.name, email: user.email }, remember);
-  initializeApp();
 });
 
 logoutBtn.addEventListener("click", () => {
@@ -284,25 +300,21 @@ document.getElementById("new-appointment-desktop").addEventListener("click", () 
 document.getElementById("new-appointment-mobile").addEventListener("click", () => openAppointmentModal());
 closeModalBtn.addEventListener("click", closeModal);
 
-cancelAppointmentBtn.addEventListener("click", () => {
+cancelAppointmentBtn.addEventListener("click", async () => {
   const id = formFields.id.value;
   if (!id) return;
 
-  appointments = appointments.map((item) =>
-    item.id === id
-      ? {
-          ...item,
-          status: "Cancelada",
-        }
-      : item
-  );
-
-  saveAppointments();
-  refreshAgenda();
-  closeModal();
+  try {
+    const updated = await apiRequest(`/api/appointments/${id}/cancel`, { method: "PATCH" });
+    appointments = appointments.map((item) => (item.id === id ? updated : item));
+    refreshAgenda();
+    closeModal();
+  } catch (error) {
+    alert(error.message || "No se pudo cancelar la cita.");
+  }
 });
 
-appointmentForm.addEventListener("submit", (event) => {
+appointmentForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const payload = {
@@ -319,20 +331,31 @@ appointmentForm.addEventListener("submit", (event) => {
     status: "Programada",
   };
 
-  if (formFields.id.value) {
-    const current = appointments.find((a) => a.id === formFields.id.value);
-    payload.status = current?.status || "Programada";
-    appointments = appointments.map((a) => (a.id === payload.id ? payload : a));
-  } else {
-    appointments.push(payload);
-  }
+  try {
+    if (formFields.id.value) {
+      const current = appointments.find((a) => a.id === formFields.id.value);
+      payload.status = current?.status || "Programada";
+      const updated = await apiRequest(`/api/appointments/${payload.id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      appointments = appointments.map((a) => (a.id === payload.id ? updated : a));
+    } else {
+      const created = await apiRequest("/api/appointments", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      appointments.push(created);
+    }
 
-  saveAppointments();
-  refreshAgenda();
-  closeModal();
+    refreshAgenda();
+    closeModal();
+  } catch (error) {
+    alert(error.message || "No se pudo guardar la cita.");
+  }
 });
 
-function initializeApp() {
+async function initializeApp() {
   const session = activeSession();
   if (!session) {
     showView("login");
@@ -341,7 +364,14 @@ function initializeApp() {
 
   rolePill.textContent = `${session.userName} · ${session.userRole}`;
   showView("agenda");
-  refreshAgenda();
+
+  try {
+    await loadAppointments();
+    refreshAgenda();
+  } catch (error) {
+    alert("No se pudo cargar la agenda desde la base de datos.");
+    console.error(error);
+  }
 }
 
 initializeApp();
