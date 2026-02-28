@@ -1,4 +1,4 @@
-const { beforeEach, describe, expect, it, vi } = require('vitest');
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function buildDom() {
   document.body.innerHTML = `
@@ -38,58 +38,50 @@ function buildDom() {
   `;
 }
 
-function loadModule() {
+let app;
+
+beforeEach(async () => {
   vi.resetModules();
-  return require('../../public/app.js');
-}
+  buildDom();
+  localStorage.clear();
+  sessionStorage.clear();
+  global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [] });
+  app = await import(`../../public/app.exports.js?bust=${Date.now()}`);
+});
 
-describe('session and helpers', () => {
-  beforeEach(() => {
-    buildDom();
-    localStorage.clear();
-    sessionStorage.clear();
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [] });
-  });
-
-  it('setSession/activeSession/clearSession funcionan correctamente', () => {
-    const app = loadModule();
-
-    app.setSession({ email: 'test@bugsoft.com' }, true);
-    expect(app.activeSession()).toEqual({ email: 'test@bugsoft.com' });
+describe("session and helpers", () => {
+  it("setSession/activeSession/clearSession funcionan correctamente", () => {
+    app.setSession({ email: "test@bugsoft.com" }, true);
+    expect(app.activeSession()).toEqual({ email: "test@bugsoft.com" });
 
     app.clearSession();
     expect(app.activeSession()).toBeNull();
   });
 
-  it('parseDayFromDate y roundedHour retornan valores esperados', () => {
-    const app = loadModule();
-
-    expect(app.parseDayFromDate('2026-03-02')).toBe('Lun');
-    expect(app.roundedHour('12:45')).toBe('12:00');
+  it("parseDayFromDate y roundedHour retornan valores esperados", () => {
+    expect(app.parseDayFromDate("2026-03-02")).toBe("Lun");
+    expect(app.roundedHour("12:45")).toBe("12:00");
   });
 
-  it('normalizeDemoDate devuelve formato YYYY-MM-DD', () => {
-    const app = loadModule();
-    expect(app.normalizeDemoDate('Lun')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  it("normalizeDemoDate devuelve formato YYYY-MM-DD", () => {
+    expect(app.normalizeDemoDate("Lun")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('apiRequest retorna json y lanza error cuando fetch falla', async () => {
-    const app = loadModule();
-
+  it("apiRequest retorna json y lanza error cuando fetch falla", async () => {
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: async () => ({ ok: true }),
     });
 
-    await expect(app.apiRequest('/api/ok')).resolves.toEqual({ ok: true });
+    await expect(app.apiRequest("/api/ok")).resolves.toEqual({ ok: true });
 
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: false,
       status: 400,
-      json: async () => ({ message: 'Error controlado' }),
+      json: async () => ({ message: "Error controlado" }),
     });
 
-    await expect(app.apiRequest('/api/fail')).rejects.toThrow('Error controlado');
+    await expect(app.apiRequest("/api/fail")).rejects.toThrow("Error controlado");
   });
 });

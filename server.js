@@ -130,11 +130,11 @@ app.post("/api/appointments", async (req, res) => {
 
     res.status(201).json(rows[0]);
   } catch (err) {
-    console.error(err);
     if (err.code === "ER_DUP_ENTRY") {
       return res.status(409).json({ message: "Ya existe una cita con ese id." });
     }
-    res.status(500).json({ message: "Error interno del servidor." });
+    console.error(err);
+    return res.status(500).json({ message: "Error interno del servidor." });
   }
 });
 

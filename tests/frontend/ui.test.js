@@ -1,4 +1,4 @@
-const { beforeEach, describe, expect, it, vi } = require('vitest');
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function buildDom() {
   document.body.innerHTML = `
@@ -38,51 +38,54 @@ function buildDom() {
   `;
 }
 
-function loadModule() {
+let app;
+
+beforeEach(async () => {
   vi.resetModules();
-  return require('../../public/app.js');
-}
+  buildDom();
+  global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [] });
+  app = await import(`../../public/app.exports.js?bust=${Date.now()}`);
+});
 
-describe('ui helpers', () => {
-  beforeEach(() => {
-    buildDom();
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [] });
-  });
-
+describe("ui helpers", () => {
   it('renderMobileAppointments muestra "Sin citas" cuando no hay resultados', () => {
-    const app = loadModule();
     app.__setAppointments([]);
-    app.__setSelectedDay('Lun');
+    app.__setSelectedDay("Lun");
 
     app.renderMobileAppointments();
 
-    expect(document.getElementById('mobile-appointments').textContent).toContain('Sin citas');
+    expect(document.getElementById("mobile-appointments").textContent).toContain("Sin citas");
   });
 
-  it('renderMobileAppointments crea tarjetas con paciente y motivo', () => {
-    const app = loadModule();
-    app.__setSelectedDay('Lun');
+  it("renderMobileAppointments crea tarjetas con paciente y motivo", () => {
+    app.__setSelectedDay("Lun");
     app.__setAppointments([
-      { date: '2026-03-02', time: '10:00', patient: 'Ana', reason: 'Revisión', doctor: 'Dra. Ruiz', status: 'Programada' },
+      {
+        date: "2026-03-02",
+        time: "10:00",
+        patient: "Ana",
+        reason: "Revisión",
+        doctor: "Dra. Ruiz",
+        status: "Programada",
+      },
     ]);
 
     app.renderMobileAppointments();
 
-    const cards = document.querySelectorAll('#mobile-appointments .mobile-card');
+    const cards = document.querySelectorAll("#mobile-appointments .mobile-card");
     expect(cards.length).toBe(1);
-    expect(cards[0].textContent).toContain('Ana');
-    expect(cards[0].textContent).toContain('Revisión');
+    expect(cards[0].textContent).toContain("Ana");
+    expect(cards[0].textContent).toContain("Revisión");
   });
 
-  it('createMobileDayChips crea botones y marca el seleccionado', () => {
-    const app = loadModule();
-    app.__setSelectedDay('Mar');
+  it("createMobileDayChips crea botones y marca el seleccionado", () => {
+    app.__setSelectedDay("Mar");
 
     app.createMobileDayChips();
 
-    const chips = document.querySelectorAll('.mobile-day-selector .day-chip');
+    const chips = document.querySelectorAll(".mobile-day-selector .day-chip");
     expect(chips.length).toBe(5);
-    const active = document.querySelector('.mobile-day-selector .day-chip.active');
-    expect(active.textContent).toBe('Mar');
+    const active = document.querySelector(".mobile-day-selector .day-chip.active");
+    expect(active.textContent).toBe("Mar");
   });
 });

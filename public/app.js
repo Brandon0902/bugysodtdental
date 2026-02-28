@@ -392,20 +392,18 @@ function __setSelectedDay(day) {
   selectedDay = day;
 }
 
-if (typeof module !== "undefined") {
-  module.exports = {
-    setSession,
-    activeSession,
-    clearSession,
-    parseDayFromDate,
-    roundedHour,
-    normalizeDemoDate,
-    apiRequest,
-    renderMobileAppointments,
-    createMobileDayChips,
-    __setAppointments,
-    __setSelectedDay,
-  };
-}
+globalThis.__BUGSOFT_APP__ = {
+  setSession,
+  activeSession,
+  clearSession,
+  parseDayFromDate,
+  roundedHour,
+  normalizeDemoDate,
+  apiRequest,
+  renderMobileAppointments,
+  createMobileDayChips,
+  __setAppointments,
+  __setSelectedDay,
+};
 
 bootstrapApp();
